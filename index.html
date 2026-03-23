@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="My Life">
 <title>My Life</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --bg:        #080e1a;
@@ -1270,6 +1271,43 @@
 
   /* ── SCROLL PADDING ── */
   .bottom-pad { height: 16px; }
+
+  /* ── GOOGLE CONNECT ── */
+  .google-connect-card { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .google-connect-info { flex:1; }
+  .google-connect-label { font-size:14px; font-weight:600; color:var(--text); }
+  .google-connect-status { font-size:12px; color:var(--text-muted); margin-top:2px; }
+  .google-btn { padding:8px 16px; border-radius:20px; border:none; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; transition:opacity .2s; }
+  .google-btn.connect { background:var(--blue); color:#fff; }
+  .google-btn.disconnect { background:var(--card2); color:var(--text-muted); border:1px solid var(--border2); }
+  .google-btn:active { opacity:.7; }
+
+  /* ── CALENDAR EVENTS ── */
+  .google-section-label { font-size:11px; font-weight:700; color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin-bottom:10px; }
+  .google-empty { font-size:13px; color:var(--text-muted); padding:4px 0; }
+  .cal-event { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .cal-event:last-child { border-bottom:none; padding-bottom:0; }
+  .cal-event-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); margin-top:4px; flex-shrink:0; }
+  .cal-event.cal-today .cal-event-dot { background:var(--cyan); }
+  .cal-event-title { font-size:13px; font-weight:500; color:var(--text); }
+  .cal-event-time { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .cal-refresh { background:none; border:none; color:var(--text-muted); font-size:13px; cursor:pointer; padding:0; margin-left:auto; }
+  .cal-refresh:active { color:var(--blue); }
+
+  /* ── GMAIL INSIGHTS ── */
+  .gmail-header { font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+  .gmail-item { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .gmail-item:last-child { border-bottom:none; }
+  .gmail-item.gmail-urgent { background:rgba(245,91,91,0.06); border-radius:8px; padding:8px; margin:4px 0; }
+  .gmail-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; letter-spacing:.05em; white-space:nowrap; flex-shrink:0; margin-top:2px; }
+  .gmail-badge.urgent { background:rgba(245,91,91,0.2); color:var(--red); }
+  .gmail-badge.action { background:rgba(79,142,247,0.15); color:var(--blue); }
+  .gmail-subject { font-size:13px; font-weight:500; color:var(--text); }
+  .gmail-from { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .gmail-actions-header { font-size:11px; font-weight:700; color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:10px 0 6px; }
+  .gmail-action-item { display:flex; align-items:flex-start; gap:8px; padding:4px 0; font-size:13px; color:var(--text); }
+  .gmail-action-dot { color:var(--cyan); font-size:14px; flex-shrink:0; }
+  .gmail-raw-count { font-size:13px; color:var(--text-muted); margin-top:6px; }
 </style>
 </head>
 <body>
@@ -1363,6 +1401,39 @@
             <div class="ti-sub" id="today-tasks-detail">Nothing pending</div>
           </div>
           <div class="today-badge badge-amber" id="today-tasks-badge">—</div>
+        </div>
+      </div>
+
+      <!-- Google Connect -->
+      <div class="card">
+        <div class="google-connect-card">
+          <div class="google-connect-info">
+            <div class="google-connect-label">Google Account</div>
+            <div class="google-connect-status" id="google-status">Not connected</div>
+          </div>
+          <button class="google-btn connect" id="google-connect-btn" onclick="googleSignIn()">Connect</button>
+        </div>
+      </div>
+
+      <!-- Calendar Events -->
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span><span class="dot"></span>Upcoming</span>
+          <button class="cal-refresh" onclick="fetchCalendarEvents()" title="Refresh">↻</button>
+        </div>
+        <div id="cal-events-list">
+          <div class="google-empty">Connect Google to see your calendar</div>
+        </div>
+      </div>
+
+      <!-- Gmail Insights -->
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span><span class="dot"></span>Inbox Insights</span>
+          <button class="cal-refresh" onclick="fetchGmailInsights()" title="Refresh">↻</button>
+        </div>
+        <div id="gmail-list">
+          <div class="google-empty">Connect Google to see email insights</div>
         </div>
       </div>
 
@@ -2843,6 +2914,210 @@ function loadSnapshot() {
   updateHappeningOverview();
 }
 
+// ── GOOGLE AUTH ──────────────────────────────────────────────────────────────
+const GOOGLE_CLIENT_ID = '452305177474-sq63449l62nntt82vpboao2gvjidtnmr.apps.googleusercontent.com';
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly';
+let googleTokenClient;
+let googleAccessToken = null;
+
+function initGoogleAuth() {
+  if (typeof google === 'undefined') {
+    setTimeout(initGoogleAuth, 500);
+    return;
+  }
+  googleTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_SCOPES,
+    callback: (response) => {
+      if (response.error) { console.error(response); return; }
+      googleAccessToken = response.access_token;
+      localStorage.setItem('google_token', response.access_token);
+      localStorage.setItem('google_token_expiry', Date.now() + (response.expires_in * 1000));
+      updateGoogleStatus(true);
+      fetchCalendarEvents();
+      fetchGmailInsights();
+    }
+  });
+  const storedToken = localStorage.getItem('google_token');
+  const expiry = localStorage.getItem('google_token_expiry');
+  if (storedToken && expiry && Date.now() < parseInt(expiry)) {
+    googleAccessToken = storedToken;
+    updateGoogleStatus(true);
+    fetchCalendarEvents();
+    fetchGmailInsights();
+  } else {
+    updateGoogleStatus(false);
+  }
+}
+
+function googleSignIn() {
+  if (!googleTokenClient) { initGoogleAuth(); setTimeout(googleSignIn, 600); return; }
+  googleTokenClient.requestAccessToken({ prompt: '' });
+}
+
+function googleSignOut() {
+  google.accounts.oauth2.revoke(googleAccessToken, () => {
+    googleAccessToken = null;
+    localStorage.removeItem('google_token');
+    localStorage.removeItem('google_token_expiry');
+    updateGoogleStatus(false);
+  });
+}
+
+function updateGoogleStatus(connected) {
+  const btn = document.getElementById('google-connect-btn');
+  const status = document.getElementById('google-status');
+  if (connected) {
+    if (btn) { btn.textContent = 'Disconnect'; btn.className = 'google-btn disconnect'; btn.onclick = googleSignOut; }
+    if (status) { status.textContent = 'Connected ✓'; status.style.color = 'var(--green)'; }
+  } else {
+    if (btn) { btn.textContent = 'Connect'; btn.className = 'google-btn connect'; btn.onclick = googleSignIn; }
+    if (status) { status.textContent = 'Not connected'; status.style.color = 'var(--text-muted)'; }
+    const cal = document.getElementById('cal-events-list');
+    const gmail = document.getElementById('gmail-list');
+    if (cal) cal.innerHTML = '<div class="google-empty">Connect Google to see your calendar</div>';
+    if (gmail) gmail.innerHTML = '<div class="google-empty">Connect Google to see email insights</div>';
+  }
+}
+
+// ── GOOGLE CALENDAR ──────────────────────────────────────────────────────────
+async function fetchCalendarEvents() {
+  if (!googleAccessToken) return;
+  const calEl = document.getElementById('cal-events-list');
+  if (calEl) calEl.innerHTML = '<div class="google-empty">Loading…</div>';
+  const now = new Date();
+  const end = new Date(); end.setDate(end.getDate() + 7);
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=10`,
+      { headers: { Authorization: `Bearer ${googleAccessToken}` } }
+    );
+    const data = await res.json();
+    if (data.error) { handleGoogleError(data.error); return; }
+    renderCalendarEvents(data.items || []);
+  } catch(e) {
+    if (calEl) calEl.innerHTML = '<div class="google-empty">Could not load calendar</div>';
+  }
+}
+
+function renderCalendarEvents(events) {
+  const el = document.getElementById('cal-events-list');
+  if (!el) return;
+  if (!events.length) { el.innerHTML = '<div class="google-empty">No upcoming events 🎉</div>'; return; }
+  const todayStr = new Date().toDateString();
+  const tomorrowStr = new Date(Date.now() + 86400000).toDateString();
+  el.innerHTML = events.map(ev => {
+    const start = ev.start.dateTime || ev.start.date;
+    const date = new Date(start);
+    const isToday = date.toDateString() === todayStr;
+    const isTomorrow = date.toDateString() === tomorrowStr;
+    const dayLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : date.toLocaleDateString('en-NZ', {weekday:'short', month:'short', day:'numeric'});
+    const timeLabel = ev.start.dateTime ? date.toLocaleTimeString('en-NZ', {hour:'2-digit', minute:'2-digit'}) : 'All day';
+    return `<div class="cal-event${isToday ? ' cal-today' : ''}">
+      <div class="cal-event-dot"></div>
+      <div class="cal-event-body">
+        <div class="cal-event-title">${ev.summary || 'Untitled'}</div>
+        <div class="cal-event-time">${dayLabel} · ${timeLabel}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const todayEvents = events.filter(ev => new Date(ev.start.dateTime || ev.start.date).toDateString() === todayStr);
+  const label = document.getElementById('today-event-label');
+  if (label) label.textContent = todayEvents.length ? `${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today` : 'No events today';
+}
+
+// ── GMAIL INSIGHTS ────────────────────────────────────────────────────────────
+async function fetchGmailInsights() {
+  if (!googleAccessToken) return;
+  const gmailEl = document.getElementById('gmail-list');
+  if (gmailEl) gmailEl.innerHTML = '<div class="google-empty">Scanning inbox…</div>';
+  try {
+    const res = await fetch(
+      'https://www.googleapis.com/gmail/v1/users/me/messages?q=is:unread&maxResults=15',
+      { headers: { Authorization: `Bearer ${googleAccessToken}` } }
+    );
+    const data = await res.json();
+    if (data.error) { handleGoogleError(data.error); return; }
+    if (!data.messages || !data.messages.length) {
+      if (gmailEl) gmailEl.innerHTML = '<div class="google-empty">No unread emails 🎉</div>'; return;
+    }
+    const messages = await Promise.all(
+      data.messages.slice(0, 8).map(m =>
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${googleAccessToken}` } }
+        ).then(r => r.json())
+      )
+    );
+    const summaries = messages.map(msg => {
+      const h = msg.payload?.headers || [];
+      const subject = h.find(x => x.name === 'Subject')?.value || 'No subject';
+      const from = h.find(x => x.name === 'From')?.value || 'Unknown';
+      return `From: ${from}\nSubject: ${subject}\nSnippet: ${msg.snippet || ''}`;
+    }).join('\n---\n');
+    analyzeEmailsWithClaude(summaries, data.messages.length);
+  } catch(e) {
+    if (gmailEl) gmailEl.innerHTML = '<div class="google-empty">Could not load inbox</div>';
+  }
+}
+
+async function analyzeEmailsWithClaude(summaries, count) {
+  const apiKey = localStorage.getItem('life_api_key');
+  const el = document.getElementById('gmail-list');
+  if (!apiKey) {
+    if (el) el.innerHTML = `<div class="gmail-raw-count">${count} unread email${count !== 1 ? 's' : ''}</div><div class="google-empty">Add your Claude API key in the ✨ Import tab to enable smart analysis</div>`;
+    return;
+  }
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: `Analyze these ${count} unread emails for Hannah and identify what needs attention. Return ONLY valid JSON, no markdown:\n{\n  "action_emails": [{"from": "name/org", "subject": "...", "action": "brief action needed"}],\n  "urgent": [{"from": "...", "subject": "...", "reason": "why urgent"}],\n  "action_items": ["action 1", "action 2"]\n}\n\nEmails:\n${summaries}` }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON');
+    renderGmailInsights(JSON.parse(match[0]), count);
+  } catch(e) {
+    if (el) el.innerHTML = `<div class="gmail-raw-count">${count} unread emails</div><div class="google-empty">Analysis unavailable</div>`;
+  }
+}
+
+function renderGmailInsights(insights, totalCount) {
+  const el = document.getElementById('gmail-list');
+  if (!el) return;
+  let html = `<div class="gmail-header">${totalCount} unread · ${(insights.action_emails?.length || 0)} need action</div>`;
+  (insights.urgent || []).forEach(e => {
+    html += `<div class="gmail-item gmail-urgent"><div class="gmail-badge urgent">URGENT</div><div class="gmail-body"><div class="gmail-subject">${e.subject}</div><div class="gmail-from">${e.from} · ${e.reason}</div></div></div>`;
+  });
+  (insights.action_emails || []).forEach(e => {
+    html += `<div class="gmail-item"><div class="gmail-badge action">ACTION</div><div class="gmail-body"><div class="gmail-subject">${e.subject}</div><div class="gmail-from">${e.from} · ${e.action}</div></div></div>`;
+  });
+  if (insights.action_items?.length) {
+    html += `<div class="gmail-actions-header">Action items</div>`;
+    html += (insights.action_items || []).map(i => `<div class="gmail-action-item"><span class="gmail-action-dot">→</span><span>${i}</span></div>`).join('');
+  }
+  el.innerHTML = html;
+}
+
+function handleGoogleError(error) {
+  if (error.code === 401) {
+    googleAccessToken = null;
+    localStorage.removeItem('google_token');
+    localStorage.removeItem('google_token_expiry');
+    updateGoogleStatus(false);
+  }
+}
+
 // ── INIT ──
 (function init() {
   const now = new Date();
@@ -2860,6 +3135,7 @@ function loadSnapshot() {
   happeningInit();
   importInit();
   loadSnapshot();
+  initGoogleAuth();
 })();
 </script>
 </body>
